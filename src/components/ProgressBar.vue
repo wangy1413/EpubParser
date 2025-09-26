@@ -1,74 +1,54 @@
 <template>
-  <div class="progress-area">
-    <div class="progress-bar">
-      <div class="progress-fill" :style="{ width: progress + '%' }"></div>
+  <div class="progress-wrapper mt-md">
+    <div class="progress-container">
+      <div class="progress-bar" :style="{ width: progress + '%' }"></div>
     </div>
     <div class="progress-text">
-      解析中... {{ progress }}% ({{ current }}/{{ total }})
-    </div>
-    <div class="current-file" v-if="currentFile">
-      当前文件: {{ currentFile }}
+      {{ progress }}%
     </div>
   </div>
 </template>
 
-<script setup>
-defineProps({
-  progress: {
-    type: Number,
-    default: 0
-  },
-  current: {
-    type: Number,
-    default: 0
-  },
-  total: {
-    type: Number,
-    default: 0
-  },
-  currentFile: {
-    type: String,
-    default: ''
+<script>
+export default {
+  name: 'ProgressBar',
+  props: {
+    progress: {
+      type: Number,
+      required: true,
+      validator: (value) => value >= 0 && value <= 100
+    }
   }
-})
+}
 </script>
 
-<style scoped>
-.progress-area {
+<style scoped lang="scss">
+@import '../main.scss';
+
+.progress-wrapper {
   margin: 20px 0;
-  padding: 20px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.progress-container {
+  width: 100%;
+  height: 8px;
+  background-color: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
 }
 
 .progress-bar {
-  width: 100%;
-  height: 20px;
-  background: #ecf0f1;
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 10px;
-}
-
-.progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #3498db, #2ecc71);
+  background-color: $primary-color;
   transition: width 0.3s ease;
-  border-radius: 10px;
+  border-radius: 4px;
 }
 
 .progress-text {
   text-align: center;
+  color: $text-secondary;
   font-size: 14px;
-  color: #7f8c8d;
-  margin-bottom: 5px;
-}
-
-.current-file {
-  text-align: center;
-  font-size: 12px;
-  color: #95a5a6;
-  font-style: italic;
+  font-weight: 500;
 }
 </style>

@@ -1,37 +1,22 @@
 <template>
-  <div class="results-section" v-if="results.length > 0">
-    <div class="section-header">
-      <h2>解析结果</h2>
-      <button @click="exportResults" class="btn success">
-        <span class="icon">📊</span>
-        导出CSV
-      </button>
-    </div>
-
-    <div class="results-table-container">
-      <table class="results-table">
+  <div class="results-table mt-md">
+    <h2>目录结构</h2>
+    <div class="table-container">
+      <table class="table">
         <thead>
           <tr>
-            <th>文件名</th>
-            <th>书名</th>
-            <th>作者</th>
-            <th>出版社</th>
-            <th>文件大小</th>
-            <th>状态</th>
+            <th>章节</th>
+            <th>标题</th>
+            <th>内容类型</th>
+            <th>大小</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(result, index) in results" :key="index" :class="{ 'error-row': !result.success }">
-            <td>{{ getFileName(result) }}</td>
-            <td>{{ result.success ? result.data.title : '解析失败' }}</td>
-            <td>{{ result.success ? result.data.creator : '-' }}</td>
-            <td>{{ result.success ? result.data.publisher : '-' }}</td>
-            <td>{{ result.success ? formatFileSize(result.data.fileSize) : '-' }}</td>
-            <td>
-              <span :class="['status', result.success ? 'success' : 'error']">
-                {{ result.success ? '✅ 成功' : '❌ 失败' }}
-              </span>
-            </td>
+          <tr v-for="(item, index) in data" :key="index">
+            <td>{{ index + 1 }}</td>
+            <td>{{ item.title }}</td>
+            <td>{{ item.type }}</td>
+            <td>{{ formatSize(item.size) }}</td>
           </tr>
         </tbody>
       </table>
@@ -39,159 +24,83 @@
   </div>
 </template>
 
-<script setup>
-import { computed } from 'vue'
-import { useFileSystem } from '../composables/useFileSystem'
-
-const { exportToCSV } = useFileSystem()
-
-const props = defineProps({
-  results: {
-    type: Array,
-    default: () => []
-  }
-})
-
-const emit = defineEmits(['export'])
-
-const getFileName = (result) => {
-  if (result.success) {
-    return result.data.fileName
-  } else {
-    return result.filePath ? result.filePath.split('/').pop() : '未知文件'
-  }
-}
-
-const formatFileSize = (bytes) => {
-  if (!bytes) return '-'
-  const mb = bytes / 1024 / 1024
-  return `${mb.toFixed(2)} MB`
-}
-
-const exportResults = async () => {
-  try {
-    if (window.utools) {
-      const exportPath = await window.utools.showSaveDialog({
-        filters: [{ name: 'CSV文件', extensions: ['csv'] }],
-        defaultPath: 'epub解析结果.csv'
-      })
-
-      if (exportPath) {
-        exportToCSV(props.results, exportPath)
-        // 显示成功消息
-        if (window.utools.showNotification) {
-          window.utools.showNotification('导出成功！')
-        }
-      }
-    } else {
-      // 开发环境模拟
-      console.log('导出功能:', props.results)
+<script>
+export default {
+  name: 'ResultsTable',
+  props: {
+    data: {
+      type: Array,
+      required: true
     }
-  } catch (error) {
-    console.error('导出失败:', error)
+  },
+  methods: {
+    formatSize(bytes) {
+      if (!bytes || bytes === 0) return '0 B'
+      const k = 1024
+      const sizes = ['B', 'KB', 'MB', 'GB']
+      const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+    }
   }
 }
 </script>
 
-<style scoped>
-.results-section {
-  background: white;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  margin-bottom: 20px;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.section-header h2 {
-  color: #2c3e50;
-  margin: 0;
-}
-
-.results-table-container {
-  overflow-x: auto;
-}
+<style scoped lang="scss">
+@import '../main.scss';
 
 .results-table {
+  margin-top: 24px;
+}
+
+.results-table h2 {
+  color: $text-color;
+  margin-bottom: 16px;
+  font-size: 1.5rem;
+}
+
+.table-container {
+  overflow-x: auto;
+  border-radius: $border-radius;
+  box-shadow: $shadow-sm;
+}
+
+.table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  background-color: $white;
 }
 
-th,
-td {
-  padding: 12px;
-  text-align: left;
-  border-bottom: 1px solid #ecf0f1;
-}
-
-th {
-  background: #34495e;
-  color: white;
+.table th {
+  background-color: #f8f9fa;
+  color: $text-color;
   font-weight: 600;
-  position: sticky;
-  top: 0;
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 2px solid #e0e0e0;
+  white-space: nowrap;
 }
 
-tr:hover {
-  background: #f8f9fa;
+.table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
-.error-row {
-  background: #ffeaea;
+.table tr:hover {
+  background-color: #f9f9f9;
 }
 
-.error-row:hover {
-  background: #ffdada;
+.table tr:last-child td {
+  border-bottom: none;
 }
 
-.status.success {
-  color: #27ae60;
-  font-weight: bold;
-}
-
-.status.error {
-  color: #e74c3c;
-  font-weight: bold;
-}
-
-.btn.success {
-  background: #27ae60;
-  color: white;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 15px;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.btn.success:hover {
-  background: #219653;
-}
-
+/* 响应式设计 */
 @media (max-width: 768px) {
-  .section-header {
-    flex-direction: column;
-    gap: 10px;
-    align-items: flex-start;
-  }
 
-  .results-table {
-    font-size: 12px;
-  }
-
-  th,
-  td {
-    padding: 8px;
+  .table th,
+  .table td {
+    padding: 8px 12px;
+    font-size: 14px;
   }
 }
 </style>

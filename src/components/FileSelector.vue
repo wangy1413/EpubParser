@@ -1,152 +1,196 @@
 <template>
-  <div class="file-selector">
-    <div class="control-panel">
-      <button @click="selectFiles" class="btn primary">
-        <span class="icon">📚</span>
-        选择EPUB文件
+  <div class="file-selector mt-md">
+    <h2>选择 EPUB 文件或目录</h2>
+    <div class="selector-buttons">
+      <button class="btn primary" @click="handleSelectFile">
+        选择单个文件
       </button>
-      <button @click="selectFolder" class="btn secondary">
-        <span class="icon">📁</span>
-        选择文件夹
+      <button class="btn secondary" @click="handleSelectDirectory">
+        选择目录（批量扫描）
       </button>
     </div>
-
-    <div class="drop-zone" :class="{ 'dragover': isDragging }" @dragover.prevent="handleDragOver"
-      @dragleave="handleDragLeave" @drop="handleDrop">
-      <div class="drop-content">
-        <span class="drop-icon">📥</span>
-        <p>拖放EPUB文件到这里</p>
-      </div>
+    <div v-if="selectedFilePath" class="selected-file mt-sm">
+      <span class="file-path">{{ selectedFilePath }}</span>
+    </div>
+    <div v-if="selectedDirectoryPath" class="selected-file mt-sm">
+      <span class="file-path">已选择目录: {{ selectedDirectoryPath }}</span>
+    </div>
+    <div v-if="epubFilesFound > 0" class="epub-count mt-sm">
+      找到 {{ epubFilesFound }} 个 EPUB 文件
     </div>
   </div>
 </template>
 
-<script setup>
-import { ref } from 'vue'
-
-const emit = defineEmits(['files-selected', 'folder-selected'])
-
-const isDragging = ref(false)
-
-const selectFiles = async () => {
-  try {
-    if (window.utools) {
-      const files = await window.utools.showOpenDialog({
-        filters: [{ name: 'EPUB文件', extensions: ['epub'] }],
-        properties: ['openFile', 'multiSelections']
-      })
-      if (files && files.length > 0) {
-        emit('files-selected', files)
-      }
-    } else {
-      // 开发环境模拟
-      console.log('选择文件功能')
+<script>
+export default {
+  name: 'FileSelector',
+  emits: ['file-selected', 'directory-scanned'],
+  data() {
+    return {
+      selectedFilePath: '',
+      selectedDirectoryPath: '',
+      epubFilesFound: 0
     }
-  } catch (error) {
-    console.error('选择文件失败:', error)
-  }
-}
-
-const selectFolder = async () => {
-  try {
-    if (window.utools) {
-      const folder = await window.utools.showOpenDialog({
-        properties: ['openDirectory']
-      })
-      if (folder && folder.length > 0) {
-        emit('folder-selected', folder[0])
+  },
+  methods: {
+    handleSelectFile() {
+      try {
+        // 检查是否在 Node.js/uTools 环境中
+        if (typeof window !== 'undefined' && window.utools) {
+          console.log('uTools 环境')
+          // uTools 环境
+          const filePaths = window.utools.showOpenDialog({
+            title: '选择 EPUB 文件',
+            properties: ['openFile'],
+            filters: [
+              { name: 'EPUB 文件', extensions: ['epub'] }
+            ]
+          })
+          console.log('选择的文件路径:', filePaths)
+          if (filePaths && filePaths.length > 0) {
+            this.selectedFilePath = filePaths[0]
+            this.selectedDirectoryPath = ''
+            this.epubFilesFound = 0
+            this.$emit('file-selected', filePaths[0])
+          }
+        } else {
+          // 非 uTools 环境，模拟文件选择
+          console.log('非 uTools 环境，模拟文件选择')
+          // 开发环境模拟
+          const mockFilePath = '/path/to/sample.epub'
+          this.selectedFilePath = mockFilePath
+          this.selectedDirectoryPath = ''
+          this.epubFilesFound = 0
+          this.$emit('file-selected', mockFilePath)
+        }
+      } catch (error) {
+        console.error('选择文件失败:', error)
+        alert('选择文件失败: ' + error.message)
       }
-    } else {
-      // 开发环境模拟
-      console.log('选择文件夹功能')
+    },
+
+    handleSelectDirectory() {
+      try {
+
+        // 检查是否在 Node.js/uTools 环境中
+        if (typeof window !== 'undefined' && window.utools) {
+          // uTools 环境
+          const directoryPaths = window.utools.showOpenDialog({
+            title: '选择目录',
+            properties: ['openDirectory']
+          })
+          console.log('选择的目录路径:', directoryPaths)
+          if (directoryPaths && directoryPaths.length > 0) {
+            this.selectedDirectoryPath = directoryPaths[0]
+            this.selectedFilePath = ''
+            // 发送目录扫描事件，但不在此组件中执行扫描，让父组件处理
+            this.$emit('directory-scanned', directoryPaths[0])
+          }
+        } else {
+          // 开发环境模拟
+          const mockDirectoryPath = '/path/to/epub/books'
+          this.selectedDirectoryPath = mockDirectoryPath
+          this.selectedFilePath = ''
+          this.$emit('directory-scanned', mockDirectoryPath)
+        }
+      } catch (error) {
+        console.error('选择目录失败:', error)
+        alert('选择目录失败: ' + error.message)
+      }
+    },
+
+    // 设置扫描到的 EPUB 文件数量
+    setEpubFilesCount(count) {
+      this.epubFilesFound = count
     }
-  } catch (error) {
-    console.error('选择文件夹失败:', error)
-  }
-}
-
-const handleDragOver = () => {
-  isDragging.value = true
-}
-
-const handleDragLeave = () => {
-  isDragging.value = false
-}
-
-const handleDrop = (e) => {
-  e.preventDefault()
-  isDragging.value = false
-
-  const files = Array.from(e.dataTransfer.files)
-    .filter(file => file.name.toLowerCase().endsWith('.epub'))
-    .map(file => file.path)
-
-  if (files.length > 0) {
-    emit('files-selected', files)
   }
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
+@import '../main.scss';
+
 .file-selector {
-  margin-bottom: 20px;
+  text-align: center;
+  padding: 20px;
+  border: 2px dashed #ddd;
+  border-radius: $border-radius;
+  background-color: #f9f9f9;
 }
 
-.control-panel {
+.file-selector h2 {
+  color: $text-color;
+  margin-bottom: 16px;
+  font-size: 1.5rem;
+}
+
+.selector-buttons {
   display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
   flex-wrap: wrap;
 }
 
-.btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
+.selected-file {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: $white;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-path {
+  color: $primary-color;
+  font-family: monospace;
+}
+
+.file-name {
+  color: $text-color;
   font-size: 14px;
-  transition: all 0.3s ease;
+  max-width: 400px;
+}
+
+.epub-count {
+  margin-top: 12px;
+  color: $text-secondary;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.btn {
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
 }
 
 .btn.primary {
-  background: #3498db;
-  color: white;
+  background-color: $primary-color;
+  color: $white;
+}
+
+.btn.primary:hover {
+  background-color: darken($primary-color, 10%);
+  transform: translateY(-2px);
+  box-shadow: $shadow-sm;
 }
 
 .btn.secondary {
-  background: #95a5a6;
-  color: white;
+  background-color: #e0e0e0;
+  color: $text-color;
 }
 
-.btn:hover {
+.btn.secondary:hover {
+  background-color: #d0d0d0;
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.drop-zone {
-  border: 2px dashed #bdc3c7;
-  border-radius: 8px;
-  padding: 40px 20px;
-  text-align: center;
-  transition: all 0.3s ease;
-  background: #f8f9fa;
-}
-
-.drop-zone.dragover {
-  border-color: #3498db;
-  background: #e3f2fd;
-}
-
-.drop-content {
-  color: #7f8c8d;
-}
-
-.drop-icon {
-  font-size: 2em;
-  display: block;
-  margin-bottom: 10px;
+  box-shadow: $shadow-sm;
 }
 </style>

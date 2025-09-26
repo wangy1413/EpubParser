@@ -1,66 +1,38 @@
-import { ref, computed } from 'vue'
-import { useFileSystem } from './useFileSystem'
+import { ref } from 'vue'
+import { parseEpub } from '../utils/epubParser'
 
 export function useEpubParser() {
-  const results = ref([])
-  const isProcessing = ref(false)
-  const progress = ref(0)
-  const currentFile = ref('')
-  const totalFiles = ref(0)
-
-  const { readEpubFiles, parseEpubFile, exportToCSV } = useFileSystem()
-
-  const parseFiles = async (filePaths) => {
-    isProcessing.value = true
-    results.value = []
-    totalFiles.value = filePaths.length
-
-    for (let i = 0; i < filePaths.length; i++) {
-      const filePath = filePaths[i]
-      currentFile.value = filePath
-      progress.value = Math.round(((i + 1) / filePaths.length) * 100)
-
-      try {
-        const metadata = await parseEpubFile(filePath)
-        results.value.push({
-          success: true,
-          data: metadata
-        })
-      } catch (error) {
-        results.value.push({
-          success: false,
-          error: error.message,
-          filePath: filePath
-        })
-      }
-    }
-
-    isProcessing.value = false
-    progress.value = 0
-    currentFile.value = ''
-  }
-
-  const parseFolder = async (folderPath) => {
+  const loading = ref(false)
+  const error = ref(null)
+  
+  const parseEpubFile = async (filePath) => {
     try {
-      const epubFiles = await readEpubFiles(folderPath)
-      if (epubFiles.length === 0) {
-        throw new Error('该文件夹中没有找到EPUB文件')
+      loading.value = true
+      error.value = null
+      
+      // 检查是否在 Node.js 环境中
+      let fileData
+      if (typeof window !== 'undefined' && window.electronAPI) {
+        // uTools 环境，使用原生文件系统
+        fileData = await window.electronAPI.readFile(filePath)
+      } else {
+        // 浏览器环境，模拟读取文件（实际项目中需要通过 FileReader）
+        throw new Error('浏览器环境暂不支持直接解析文件，请在 uTools 中使用')
       }
-      await parseFiles(epubFiles)
-    } catch (error) {
-      console.error('处理文件夹失败:', error)
-      // 可以添加错误提示
+      
+      const result = await parseEpub(fileData, filePath)
+      return result
+    } catch (err) {
+      error.value = err.message
+      throw err
+    } finally {
+      loading.value = false
     }
   }
-
+  
   return {
-    results,
-    isProcessing,
-    progress,
-    currentFile,
-    totalFiles,
-    parseFiles,
-    parseFolder,
-    exportToCSV
+    parseEpubFile,
+    loading,
+    error
   }
 }

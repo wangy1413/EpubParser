@@ -1,79 +1,252 @@
 <template>
   <div class="app">
-    <header class="app-header">
-      <h1>EPUB文件批量解析器</h1>
-      <p>批量提取EPUB文件的元数据信息</p>
+    <header class="app-header text-center mb-md">
+      <h1>EPUB 解析器</h1>
+      <p>用于解析 EPUB 文件并提取目录结构和统计信息</p>
     </header>
 
-    <div class="app-content">
-      <FileSelector @files-selected="handleFilesSelected" @folder-selected="handleFolderSelected" />
+    <main class="app-main">
+      <!-- 文件选择器 -->
+      <FileSelector ref="fileSelectorRef" @file-selected="handleFileSelected"
+        @directory-scanned="handleDirectoryScanned" />
 
-      <ProgressBar v-if="isProcessing" :progress="progress" :current="currentFile" :total="totalFiles" />
+      <!-- 进度条 -->
+      <ProgressBar v-if="progress > 0 && progress < 100" :progress="progress" />
 
-      <Statistics v-if="results.length > 0" :results="results" />
+      <!-- 错误提示 -->
+      <div v-if="error" class="error-message">
+        {{ error }}
+      </div>
 
-      <ResultsTable :results="results" @export="handleExport" />
-    </div>
+      <!-- EPUB文件列表 -->
+      <BooksTable v-if="showBooksTable" :books="epubFiles" @book-selected="handleBookSelected" />
+
+      <!-- 统计信息 -->
+      <Statistics v-if="statistics" :stats="statistics" />
+
+      <!-- 结果表格 -->
+      <ResultsTable v-if="results.length > 0" :data="results" />
+    </main>
   </div>
 </template>
 
-<script setup>
+<script>
 import { ref, computed } from 'vue'
 import FileSelector from './components/FileSelector.vue'
 import ProgressBar from './components/ProgressBar.vue'
 import ResultsTable from './components/ResultsTable.vue'
 import Statistics from './components/Statistics.vue'
+import BooksTable from './components/BooksTable.vue'
 import { useEpubParser } from './composables/useEpubParser'
+import { useFileSystem } from './composables/useFileSystem'
 
-const {
-  results,
-  isProcessing,
-  progress,
-  currentFile,
-  totalFiles,
-  parseFiles,
-  parseFolder
-} = useEpubParser()
+export default {
+  name: 'App',
+  components: {
+    FileSelector,
+    ProgressBar,
+    ResultsTable,
+    Statistics,
+    BooksTable
+  },
+  setup() {
+    const fileSelectorRef = ref(null)
+    const results = ref([])
+    const statistics = ref(null)
+    const progress = ref(0)
+    const error = ref('')
+    const epubFiles = ref([])
+    const isScanning = ref(false)
 
-const handleFilesSelected = async (files) => {
-  await parseFiles(files)
-}
+    const { parseEpubFile } = useEpubParser()
+    const { isEpubFile, scanDirectoryForEpubs } = useFileSystem()
+    // 计算属性：是否显示书籍表格
+    const showBooksTable = computed(() => {
+      return epubFiles.value.length > 0
+    })
 
-const handleFolderSelected = async (folderPath) => {
-  await parseFolder(folderPath)
-}
+    // 处理单个文件选择
+    const handleFileSelected = async (filePath) => {
+      console.log(`选择的文件路径: ${filePath}`)
+      try {
+        // 重置状态
+        results.value = []
+        statistics.value = null
+        error.value = ''
+        progress.value = 0
+        epubFiles.value = [] // 清空文件列表
 
-const handleExport = () => {
-  // 导出功能在 ResultsTable 组件中实现
+        // 验证文件类型
+        if (!isEpubFile(filePath)) {
+          throw new Error('请选择 EPUB 格式文件')
+        }
+
+        // 显示进度
+        progress.value = 10
+
+        // 解析文件
+        await parseSingleFile(filePath)
+
+      } catch (err) {
+        console.error('处理文件时出错:', err)
+        error.value = err.message || '处理文件时发生错误'
+        progress.value = 0
+      }
+    }
+
+    //处理目录扫描
+    const handleDirectoryScanned = async (directoryPath) => {
+      try {
+        // 重置状态
+        results.value = []
+        statistics.value = null
+        error.value = ''
+        progress.value = 30 // 表示扫描开始
+        isScanning.value = true
+        epubFiles.value = []
+
+        console.log(`开始扫描目录: ${directoryPath}`)
+
+        // 扫描目录B 文件
+        const files = await scanDirectoryForEpubs(directoryPath)
+
+        // 更新文件列表
+        epubFiles.value = files
+
+        // 更新进度和文件数量显示
+        progress.value = 100
+        if (fileSelectorRef.value) {
+          fileSelectorRef.value.setEpubFilesCount(files.length)
+        }
+
+        console.log(`扫描完成，找到 ${files.length} 个 EPUB 文件`)
+
+        // 重置进度条
+        setTimeout(() => {
+          progress.value = 0
+        }, 1000)
+
+      } catch (err) {
+        console.error('扫描目录时出错:', err)
+        error.value = err.message || '扫描目录时发生错误'
+        progress.value = 0
+
+      } finally {
+        isScanning.value = false
+      }
+    }
+
+    // 从文件列表中选择一本书进行解析
+    const handleBookSelected = async (filePath) => {
+      try {
+        // 重置状态
+        results.value = []
+        statistics.value = null
+        error.value = ''
+        progress.value = 10
+
+        // 解析文件
+        await parseSingleFile(filePath)
+      } catch (err) {
+        console.error('解析文件时出错:', err)
+        error.value = err.message || '解析文件时发生错误'
+        progress.value = 0
+      }
+    }
+
+    // 解析单个文件
+    const parseSingleFile = async (filePath) => {
+      try {
+        // 显示进度
+        progress.value = 30
+
+        // 解析文件
+        const parseResult = await parseEpubFile(filePath)
+
+        // 更新进度
+        progress.value = 90
+
+        // 设置结果
+        results.value = parseResult.content || []
+        statistics.value = parseResult.statistics
+
+        // 完成进度
+        progress.value = 100
+
+        // 重置进度条
+        setTimeout(() => {
+          progress.value = 0
+        }, 1000)
+
+        return parseResult
+      } catch (err) {
+        console.error('解析文件时出错:', err)
+        error.value = err.message || '解析文件时发生错误'
+        progress.value = 0
+        throw err
+      }
+    }
+
+    return {
+      fileSelectorRef,
+      results,
+      statistics,
+      progress,
+      error,
+      epubFiles,
+      showBooksTable,
+      handleFileSelected,
+      handleDirectoryScanned,
+      handleBookSelected
+    }
+  }
 }
 </script>
 
-<style scoped>
-.app {
-  min-height: 100vh;
-  background: #f5f5f5;
-}
+<style scoped lang="scss">
+@import './main.scss';
 
-.app-header {
-  text-align: center;
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
   padding: 20px;
-  background: white;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  margin-bottom: 20px;
 }
 
 .app-header h1 {
-  color: #2c3e50;
+  color: $primary-color;
+  font-size: 2.5rem;
   margin-bottom: 10px;
 }
 
 .app-header p {
-  color: #7f8c8d;
+  color: $text-secondary;
+  font-size: 1.1rem;
 }
 
-.app-content {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
+.app-main {
+  background-color: $white;
+  border-radius: $border-radius;
+  padding: 30px;
+  box-shadow: $shadow-md;
+}
+
+.error-message {
+  background-color: #fdf2f2;
+  color: $error-color;
+  padding: 16px;
+  border-radius: $border-radius;
+  margin-top: 20px;
+  border: 1px solid #fde2e2;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .app-main {
+    padding: 15px;
+  }
+
+  .app-header h1 {
+    font-size: 2rem;
+  }
 }
 </style>

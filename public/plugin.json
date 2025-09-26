@@ -1,7 +1,10 @@
 {
   "main": "index.html",
-  "logo": "public/logo.png",
-  "preload": "public/preload.js",
+  "preload": "preload/services.js",
+  "logo": "logo.png",
+  "development": {
+    "main": "http://localhost:5173"
+  },
   "features": [
     {
       "code": "batch-epub-parse",
