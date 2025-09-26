@@ -1,0 +1,29 @@
+{
+  "main": "index.html",
+  "logo": "logo.png",
+  "preload": "preload.js",
+  "features": [
+    {
+      "code": "batch-epub-parse",
+      "explain": "批量解析EPUB文件信息，提取书名、作者等元数据",
+      "cmds": [
+        "epub解析",
+        "epub信息",
+        "批量epub",
+        {
+          "type": "files",
+          "label": "解析EPUB信息",
+          "fileType": "file",
+          "fileExt": [
+            ".epub"
+          ],
+          "minLength": 1
+        }
+      ]
+    }
+  ],
+  "name": "EPUB批量解析器",
+  "author": "yi",
+  "version": "1.0.0",
+  "description": "批量解析EPUB文件的元数据信息"
+}
