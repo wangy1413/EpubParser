@@ -93,23 +93,29 @@ window.epubAPI = {
 
   exportToCSV: (data, exportPath) => {
     try {
-      const headers = ['文件名', '书名', '书号', '作者', '出版社', '出版日期', '简介', '章节数', '文件大小'];
-      const csvRows = data
-        .filter(item => item.success)
-        .map(item => {
-          const result = item.result || {};
-          return [
-            `"${(result.fileName || '未知').replace(/"/g, '""')}"`,
-            `"${(result.title || '未知').replace(/"/g, '""')}"`,
-            `"${(result.bookId || '未知书号').replace(/"/g, '""')}"`,
-            `"${(result.author || result.creator || '未知作者').replace(/"/g, '""')}"`,
-            `"${(result.publisher || '未知出版社').replace(/"/g, '""')}"`,
-            `"${(result.publishDate || result.date || new Date().toISOString()).replace(/"/g, '""')}"`,
-            `"${(result.description || '暂无简介').replace(/"/g, '""')}"`,
-            result.chaptersCount || 0,
-            result.fileSize || 0
-          ].join(',');
-        });
+      const headers = ['文件名', '书名', '书号', '作者', '出版社', '出版日期', '简介'];
+      const csvRows = data.map(item => {
+        const result = item.result || {};
+
+        // 过滤简介中的HTML标签
+        let description = result.description || '暂无简介';
+        if (description) {
+          // 使用正则表达式移除HTML标签
+          description = description.replace(/<[^>]*>/g, '');
+          // 移除多余的空格和换行
+          description = description.replace(/\s+/g, ' ').trim();
+        }
+
+        return [
+          `"${(result.fileName || '未知').replace(/"/g, '""')}"`,
+          `"${(result.title || '未知标题').replace(/"/g, '""')}"`,
+          result.bookId || '',
+          `"${(result.author || result.creator || '未知作者').replace(/"/g, '""')}"`,
+          `"${(result.publisher || '未知出版社').replace(/"/g, '""')}"`,
+          `"${(result.publishDate || result.date || '').replace(/"/g, '""')}"`,
+          `"${description.replace(/"/g, '""')}"`
+        ].join(',');
+      });
 
       const csvContent = [headers.join(','), ...csvRows].join('\n');
       fs.writeFileSync(exportPath, '\uFEFF' + csvContent, 'utf8');

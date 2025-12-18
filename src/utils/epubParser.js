@@ -54,6 +54,7 @@ export async function parseEpub(fileData, filePath = '') {
       console.warn('epubjs 解析失败，详细错误:', epubjsError)
       // 如果 epubjs 解析失败，提供模拟数据
       bookData = generateMockContents()
+
       statistics = generateMockStatistics(filePath)
     }
 
@@ -100,46 +101,67 @@ function extractContents(navigation) {
 }
 
 /**
+ * 格式化书号
+ * @param {string} bookId - 原始书号
+ * @returns {string} 格式化后的书号
+ */
+function formatBookId(bookId) {
+  if (!bookId) return ''
+
+  // 处理 UUID 格式 (urn:uuid:xxx-xxx-xxx)
+  if (bookId.startsWith('urn:uuid:')) {
+    return ''
+  }
+
+  // 可以添加其他格式的处理逻辑
+  return bookId
+}
+
+/**
  * 计算统计信息
  */
 async function calculateStatistics(book, contents, filePath) {
   // 尝试获取书籍元数据
-  const metadata = await book.package.metadata || {}
+  const metadata = book.package.metadata || {}
+  console.log('原始元数据:', JSON.stringify(metadata, null, 2));
 
   // 从文件路径获取文件名
   const fileName = filePath ? filePath.split('/').pop() || filePath.split('\\').pop() : '未知文件'
 
+  // 过滤作者字段
+  let author = metadata.creator || ''
+  if (author.toLowerCase() === 'unknown') {
+    author = ''
+  }
+
+  // 过滤出版时间
+  let publishDate = metadata.date || metadata.pubdate || ''
+  // 处理无效的默认时间
+  if (publishDate === '0101-01-01T00:00:00+00:00' || publishDate === '0001-01-01T00:00:00Z') {
+    publishDate = ''
+  } else if (publishDate) {
+    // 格式化有效的出版时间
+    publishDate = new Date(publishDate).toISOString().split('T')[0]
+  }
+
+  // 过滤简介中的HTML标签
+  let description = metadata.description || ''
+  if (description) {
+    // 使用正则表达式移除HTML标签
+    description = description.replace(/<[^>]*>/g, '')
+    // 移除多余的空格和换行
+    description = description.replace(/\s+/g, ' ').trim()
+  }
+
   return {
     fileName: fileName,
-    title: metadata.title || '未知标题',
-    bookId: metadata.identifier || '未知书号',
-    author: metadata.creator || '未知作者',
-    publisher: metadata.publisher || '未知出版社',
-    publishDate: metadata.date || new Date().toISOString(),
-    description: metadata.description || '暂无简介',
-    chaptersCount: contents.length,
-    fileSize: getFileSize(filePath)
+    title: metadata.title || '',
+    bookId: formatBookId(metadata.identifier),
+    author: author,
+    publisher: metadata.publisher || '',
+    publishDate: publishDate,
+    description: description
   }
-}
-
-/**
- * 获取文件大小
- */
-function getFileSize(filePath) {
-  if (!filePath) return 0
-
-  try {
-    if (typeof window !== 'undefined' && window.electronAPI) {
-      const stats = window.electronAPI.readFileSync ?
-        window.electronAPI.readFileSync(filePath) :
-        { size: 0 }
-      return stats.size || 0
-    }
-  } catch (error) {
-    console.warn('无法获取文件大小:', error)
-  }
-
-  return Math.floor(Math.random() * 1024 * 1024) + 1024 * 100 // 随机生成大小（100KB-1.1MB）
 }
 
 /**
@@ -147,15 +169,15 @@ function getFileSize(filePath) {
  */
 function generateMockContents() {
   return [
-    { title: '封面', type: 'image', size: 1024 * 200, level: 0 },
-    { title: '前言', type: 'text', size: 1024 * 5, level: 0 },
-    { title: '第一章 开始', type: 'text', size: 1024 * 30, level: 0 },
-    { title: '1.1 准备工作', type: 'text', size: 1024 * 10, level: 1 },
-    { title: '1.2 基础知识', type: 'text', size: 1024 * 20, level: 1 },
-    { title: '第二章 进阶', type: 'text', size: 1024 * 40, level: 0 },
-    { title: '第三章 实践', type: 'text', size: 1024 * 50, level: 0 },
-    { title: '附录', type: 'text', size: 1024 * 15, level: 0 },
-    { title: '参考文献', type: 'text', size: 1024 * 8, level: 0 }
+    { title: '封面', type: 'image', level: 0 },
+    { title: '前言', type: 'text', level: 0 },
+    { title: '第一章 开始', type: 'text', level: 0 },
+    { title: '1.1 准备工作', type: 'text', level: 1 },
+    { title: '1.2 基础知识', type: 'text', level: 1 },
+    { title: '第二章 进阶', type: 'text', level: 0 },
+    { title: '第三章 实践', type: 'text', level: 0 },
+    { title: '附录', type: 'text', level: 0 },
+    { title: '参考文献', type: 'text', level: 0 }
   ]
 }
 
@@ -163,9 +185,6 @@ function generateMockContents() {
  * 生成模拟统计数据
  */
 function generateMockStatistics(filePath) {
-  const mockContents = generateMockContents()
-  const totalSize = mockContents.reduce((sum, item) => sum + item.size, 0)
-
   // 从文件路径获取文件名
   const fileName = filePath ? filePath.split('/').pop() || filePath.split('\\').pop() : '未知文件'
 
@@ -179,9 +198,7 @@ function generateMockStatistics(filePath) {
     bookId: 'ISBN' + Math.floor(Math.random() * 1000000000).toString().padStart(10, '0'),
     author: mockAuthors[Math.floor(Math.random() * mockAuthors.length)],
     publisher: mockPublishers[Math.floor(Math.random() * mockPublishers.length)],
-    publishDate: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString(),
-    description: '这是一本关于技术和创新的书籍，探讨了现代科技发展对社会的影响。',
-    chaptersCount: mockContents.length,
-    fileSize: totalSize
+    publishDate: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    description: '这是一本关于技术和创新的书籍，探讨了现代科技发展对社会的影响。'
   }
 }

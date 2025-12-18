@@ -8,7 +8,6 @@
             <th>章节</th>
             <th>标题</th>
             <th>内容类型</th>
-            <th>大小</th>
           </tr>
         </thead>
         <tbody>
@@ -16,7 +15,9 @@
             <td>{{ index + 1 }}</td>
             <td>{{ item.title }}</td>
             <td>{{ item.type }}</td>
-            <td>{{ formatSize(item.size) }}</td>
+          </tr>
+          <tr v-if="data.length === 0">
+            <td colspan="3" class="no-data">暂无目录数据</td>
           </tr>
         </tbody>
       </table>
@@ -31,16 +32,6 @@ export default {
     data: {
       type: Array,
       required: true
-    }
-  },
-  methods: {
-    formatSize(bytes) {
-      if (!bytes || bytes === 0) return '0 B'
-      const k = 1024
-      const sizes = ['B', 'KB', 'MB', 'GB']
-      const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
     }
   }
 }

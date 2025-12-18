@@ -2,15 +2,11 @@
   <div class="books-table mt-md">
     <div class="table-header">
       <h2>EPUB 文件列表</h2>
-      <button 
-        class="btn export-btn" 
-        @click="exportToExcel" 
-        :disabled="books.length === 0"
-      >
-        导出Excel表格
+      <button class="btn export-btn" @click="exportToExcel" :disabled="books.length === 0 || loading">
+        {{ loading ? '导出中...' : '批量导出解析数据' }}
       </button>
     </div>
-    
+
     <div class="table-container">
       <table class="table">
         <thead>
@@ -18,8 +14,6 @@
             <th>序号</th>
             <th>文件名</th>
             <th>大小</th>
-            <th>修改时间</th>
-            <th>创建时间</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -28,8 +22,6 @@
             <td>{{ index + 1 }}</td>
             <td class="file-name">{{ book.name }}</td>
             <td>{{ formatSize(book.size) }}</td>
-            <td>{{ formatDate(book.mtime) }}</td>
-            <td>{{ formatDate(book.birthtime) }}</td>
             <td>
               <button class="btn btn-small" @click="handleSelectBook(book)">
                 解析
@@ -37,7 +29,7 @@
             </td>
           </tr>
           <tr v-if="books.length === 0">
-            <td colspan="6" class="no-data">暂无数据</td>
+            <td colspan="4" class="no-data">暂无数据</td>
           </tr>
         </tbody>
       </table>
@@ -46,6 +38,9 @@
 </template>
 
 <script>
+import { ref } from 'vue'
+import { useEpubParser } from '../composables/useEpubParser'
+
 export default {
   name: 'BooksTable',
   props: {
@@ -55,6 +50,15 @@ export default {
     }
   },
   emits: ['book-selected'],
+  setup() {
+    const loading = ref(false)
+    const { parseEpubFile } = useEpubParser()
+
+    return {
+      loading,
+      parseEpubFile
+    }
+  },
   methods: {
     formatSize(bytes) {
       if (!bytes || bytes === 0) return '0 B'
@@ -64,58 +68,71 @@ export default {
 
       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
     },
-    
-    formatDate(dateString) {
-      if (!dateString) return '-'
-      try {
-        const date = new Date(dateString)
-        if (isNaN(date.getTime())) return '-'
-        return date.toLocaleString('zh-CN')
-      } catch (error) {
-        return '-'
-      }
-    },
-    
+
     handleSelectBook(book) {
       this.$emit('book-selected', book.path)
     },
-    
-    exportToExcel() {
+
+    async exportToExcel() {
       if (this.books.length === 0) {
         alert('没有数据可导出')
         return
       }
-      
+
       try {
-        // 创建CSV内容
-        let csvContent = '序号,文件名,大小(字节),修改时间,创建时间\n'
-        
-        this.books.forEach((book, index) => {
-          const row = [
-            index + 1,
-            `"${book.name}"`, // 添加引号以处理文件名中的逗号
-            book.size || 0,
-            book.mtime ? new Date(book.mtime).toLocaleString('zh-CN') : '-',
-            book.birthtime ? new Date(book.birthtime).toLocaleString('zh-CN') : '-'
-          ]
-          csvContent += row.join(',') + '\n'
-        })
-        
+        this.loading = true
+
+        // 创建CSV内容，包含所有要求的字段
+        let csvContent = '文件名,书名,书号,作者,出版社,出版日期,简介\n'
+
+        // 逐个解析并导出
+        for (const [index, book] of this.books.entries()) {
+          try {
+            // 解析EPUB文件
+            const parseResult = await this.parseEpubFile(book.path)
+            const stats = parseResult.statistics
+
+            const row = [
+              `"${book.name.replace(/"/g, '""')}"`,
+              `"${(stats.title || '').replace(/"/g, '""')}"`,
+              stats.bookId || '',
+              `"${(stats.author || '').replace(/"/g, '""')}"`,
+              `"${(stats.publisher || '').replace(/"/g, '""')}"`,
+              `"${(stats.publishDate || '').replace(/"/g, '""')}"`,
+              `"${(stats.description || '').replace(/"/g, '""')}"`
+            ]
+            csvContent += row.join(',') + '\n'
+          } catch (err) {
+            console.warn(`解析文件 ${book.name} 失败，使用默认值`, err)
+            // 解析失败时使用默认值
+            const row = [
+              `"${book.name.replace(/"/g, '""')}"`,
+              '""',
+              '""',
+              '""',
+              '""',
+              '""',
+              '""'
+            ]
+            csvContent += row.join(',') + '\n'
+          }
+        }
+
         // 创建Blob并下载
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
         const link = document.createElement('a')
-        
+
         // 添加UTF-8 BOM以正确处理中文
         const url = URL.createObjectURL(new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), blob], { type: 'text/csv;charset=utf-8;' }))
-        
+
         link.setAttribute('href', url)
         link.setAttribute('download', `epub_books_${new Date().toISOString().split('T')[0]}.csv`)
         link.style.visibility = 'hidden'
-        
+
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
-        
+
         // 模拟导出成功的反馈
         if (typeof window !== 'undefined' && window.utools) {
           window.utools.showNotification('导出成功', '已成功导出EPUB文件列表')
@@ -129,6 +146,8 @@ export default {
         } else {
           alert('导出失败: ' + error.message)
         }
+      } finally {
+        this.loading = false
       }
     }
   }
