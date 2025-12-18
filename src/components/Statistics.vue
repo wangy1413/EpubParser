@@ -6,7 +6,22 @@
         导出Excel表格
       </button>
     </div>
+
     <div class="stats-grid">
+      <!-- 封面图展示 -->
+      <div class="stat-card cover-card">
+        <div class="label">封面图</div>
+        <div class="cover-container">
+          <img v-if="coverImage" :src="coverImage" alt="封面图" class="cover-image" />
+          <div v-else class="cover-placeholder">
+            暂无封面图
+          </div>
+        </div>
+        <button v-if="coverImage" class="btn download-btn" @click="downloadCoverImage">
+          下载封面图
+        </button>
+      </div>
+
       <div class="stat-card">
         <div class="label">文件名</div>
         <div class="value">{{ stats.fileName || '未知' }}</div>
@@ -27,7 +42,7 @@
         <div class="label">出版社</div>
         <div class="value">{{ stats.publisher || '未知' }}</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card full-width">
         <div class="label">出版日期</div>
         <div class="value">{{ formatDate(stats.publishDate) }}</div>
       </div>
@@ -46,6 +61,10 @@ export default {
     stats: {
       type: Object,
       required: true
+    },
+    coverImage: {
+      type: String,
+      default: null
     }
   },
   methods: {
@@ -60,6 +79,44 @@ export default {
         month: '2-digit',
         day: '2-digit'
       })
+    },
+
+    downloadCoverImage() {
+      if (!this.coverImage) return
+
+      try {
+        // 创建下载链接
+        const link = document.createElement('a')
+        link.href = this.coverImage
+
+        // 使用书名作为文件名，处理特殊字符
+        const fileName = (this.stats.title || '未知书名').replace(/[\\/:*?"<>|]/g, '') + '.' + this.getImageExtension(this.coverImage)
+        link.download = fileName
+
+        // 触发下载
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+
+        // 反馈
+        if (typeof window !== 'undefined' && window.utools) {
+          window.utools.showNotification('下载成功', '封面图已成功下载')
+        } else {
+          alert('封面图已成功下载')
+        }
+      } catch (error) {
+        if (typeof window !== 'undefined' && window.utools) {
+          window.utools.showNotification('下载失败', error.message)
+        } else {
+          alert('下载失败: ' + error.message)
+        }
+      }
+    },
+
+    getImageExtension(base64) {
+      // 从Base64编码中提取图片格式
+      const matches = base64.match(/^data:image\/(png|jpeg|jpg|gif);base64,/)
+      return matches ? matches[1] : 'jpg' // 默认使用jpg
     },
 
     exportToExcel() {
@@ -102,7 +159,6 @@ export default {
           alert('导出成功')
         }
       } catch (error) {
-        console.error('导出失败:', error)
         if (typeof window !== 'undefined' && window.utools) {
           window.utools.showNotification('导出失败', error.message)
         } else {
@@ -163,6 +219,7 @@ export default {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 16px;
+    grid-auto-rows: minmax(100px, auto);
   }
 
   .stat-card {
@@ -171,10 +228,78 @@ export default {
     border-radius: $border-radius;
     box-shadow: $shadow-sm;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 
     &:hover {
       transform: translateY(-2px);
       box-shadow: $shadow-md;
+    }
+  }
+
+  // 封面图卡片样式
+  .stat-card.cover-card {
+    grid-column: span 2;
+    grid-row: span 2;
+    align-items: center;
+    text-align: center;
+  }
+
+  // 封面图样式
+  .cover-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 250px;
+    background-color: #f8f9fa;
+    border-radius: $border-radius;
+    overflow: hidden;
+    margin: 8px 0;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e0e0e0;
+  }
+
+  .cover-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 4px;
+    transition: transform 0.3s ease;
+
+    &:hover {
+      transform: scale(1.05);
+    }
+  }
+
+  .cover-placeholder {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    color: $text-secondary;
+    font-style: italic;
+    font-size: 16px;
+    background-color: #f0f0f0;
+  }
+
+  .download-btn {
+    background-color: $primary-color;
+    color: $white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    margin-top: 8px;
+
+    &:hover {
+      background-color: darken($primary-color, 10%);
+      transform: translateY(-2px);
+      box-shadow: $shadow-sm;
     }
   }
 
@@ -197,9 +322,20 @@ export default {
   }
 
   /* 响应式设计 */
-  @media (max-width: 768px) {
+  @media (max-width: 1024px) {
     .stats-grid {
       grid-template-columns: repeat(2, 1fr);
+    }
+
+    .stat-card.cover-card {
+      grid-column: span 2;
+      grid-row: auto;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .stats-grid {
+      grid-template-columns: 1fr;
       gap: 12px;
     }
 
@@ -207,14 +343,23 @@ export default {
       padding: 12px;
     }
 
+    .stat-card.cover-card {
+      grid-column: span 1;
+      grid-row: auto;
+    }
+
     .stat-card .value {
       font-size: 20px;
+    }
+
+    .cover-container {
+      height: 200px !important;
     }
   }
 
   @media (max-width: 480px) {
-    .stats-grid {
-      grid-template-columns: 1fr;
+    .cover-container {
+      height: 150px !important;
     }
   }
 }

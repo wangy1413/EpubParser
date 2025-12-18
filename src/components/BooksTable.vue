@@ -2,9 +2,25 @@
   <div class="books-table mt-md">
     <div class="table-header">
       <h2>EPUB 文件列表</h2>
-      <button class="btn export-btn" @click="exportToExcel" :disabled="books.length === 0 || loading">
-        {{ loading ? '导出中...' : '批量导出解析数据' }}
-      </button>
+      <div class="header-buttons">
+        <button class="btn export-btn" @click="exportToExcel" :disabled="books.length === 0 || loading">
+          {{ loading ? '导出中...' : '批量导出解析数据' }}
+        </button>
+        <button class="btn export-btn" @click="batchExportCoverImages"
+          :disabled="books.length === 0 || coverExportLoading">
+          {{ coverExportLoading ? '导出中...' : '批量导出封面图' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- 批量导出进度提示 -->
+    <div v-if="coverExportProgress > 0" class="progress-indicator">
+      <div class="progress-text">
+        正在导出封面图: {{ currentExportIndex }}/{{ books.length }}
+      </div>
+      <div class="progress-bar-container">
+        <div class="progress-bar" :style="{ width: coverExportProgress + '%' }"></div>
+      </div>
     </div>
 
     <div class="table-container">
@@ -40,6 +56,7 @@
 <script>
 import { ref } from 'vue'
 import { useEpubParser } from '../composables/useEpubParser'
+import { createZip, base64ToBlob, downloadBlob } from '../utils/zipUtils'
 
 export default {
   name: 'BooksTable',
@@ -52,10 +69,16 @@ export default {
   emits: ['book-selected'],
   setup() {
     const loading = ref(false)
+    const coverExportLoading = ref(false)
+    const coverExportProgress = ref(0)
+    const currentExportIndex = ref(0)
     const { parseEpubFile } = useEpubParser()
 
     return {
       loading,
+      coverExportLoading,
+      coverExportProgress,
+      currentExportIndex,
       parseEpubFile
     }
   },
@@ -71,6 +94,107 @@ export default {
 
     handleSelectBook(book) {
       this.$emit('book-selected', book.path)
+    },
+
+    // 批量导出封面图
+    async batchExportCoverImages() {
+      if (this.books.length === 0) {
+        alert('没有数据可导出')
+        return
+      }
+
+      try {
+        this.coverExportLoading = true
+        this.coverExportProgress = 0
+        this.currentExportIndex = 0
+
+        const coverImages = []
+
+        // 逐个解析并收集封面图
+        for (const [index, book] of this.books.entries()) {
+          this.currentExportIndex = index + 1
+          this.coverExportProgress = Math.round(((index + 1) / this.books.length) * 100)
+
+          try {
+            // 解析EPUB文件
+            const parseResult = await this.parseEpubFile(book.path)
+
+            if (parseResult.coverImage) {
+              // 收集封面图数据
+              const blob = base64ToBlob(parseResult.coverImage)
+              if (blob) {
+                const extension = this.getImageExtension(parseResult.coverImage)
+                const title = parseResult.statistics.title || book.name.replace('.epub', '')
+                const fileName = `${title.replace(/[\\/:*?"<>|]/g, '')}.${extension}`
+
+                coverImages.push({
+                  name: fileName,
+                  blob: blob
+                })
+              }
+            }
+          } catch (err) {
+            // 继续处理下一个文件
+          }
+
+          // 延迟一下，避免浏览器卡死
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
+
+        if (coverImages.length === 0) {
+          alert('没有找到可导出的封面图')
+          return
+        }
+
+        // 创建压缩包
+        const zipBlob = await createZip(coverImages)
+
+        // 下载压缩包
+        downloadBlob(zipBlob, `epub_cover_images_${new Date().toISOString().split('T')[0]}.zip`)
+
+        // 反馈
+        if (typeof window !== 'undefined' && window.utools) {
+          window.utools.showNotification('批量导出成功', `已成功导出 ${coverImages.length} 个封面图到压缩包`)
+        } else {
+          alert(`批量导出成功，共导出 ${coverImages.length} 个封面图到压缩包`)
+        }
+      } catch (error) {
+        if (typeof window !== 'undefined' && window.utools) {
+          window.utools.showNotification('批量导出失败', error.message)
+        } else {
+          alert('批量导出失败: ' + error.message)
+        }
+      } finally {
+        this.coverExportLoading = false
+        this.coverExportProgress = 0
+        this.currentExportIndex = 0
+      }
+    },
+
+    // 下载单个封面图
+    downloadCoverImage(coverImage, title) {
+      try {
+        // 创建下载链接
+        const link = document.createElement('a')
+        link.href = coverImage
+
+        // 使用书名作为文件名，处理特殊字符
+        const fileName = (title || '未知书名').replace(/[\\/:*?"<>|]/g, '') + '.' + this.getImageExtension(coverImage)
+        link.download = fileName
+
+        // 触发下载
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } catch (error) {
+        // 下载失败已通过alert反馈给用户，不再需要控制台日志
+      }
+    },
+
+    // 从Base64编码中提取图片格式
+    getImageExtension(base64) {
+      const matches = base64.match(/^data:image\/(png|jpeg|jpg|gif);base64,/)
+      return matches ? matches[1] : 'jpg' // 默认使用jpg
     },
 
     async exportToExcel() {
@@ -103,7 +227,6 @@ export default {
             ]
             csvContent += row.join(',') + '\n'
           } catch (err) {
-            console.warn(`解析文件 ${book.name} 失败，使用默认值`, err)
             // 解析失败时使用默认值
             const row = [
               `"${book.name.replace(/"/g, '""')}"`,
@@ -140,7 +263,6 @@ export default {
           alert('导出成功')
         }
       } catch (error) {
-        console.error('导出失败:', error)
         if (typeof window !== 'undefined' && window.utools) {
           window.utools.showNotification('导出失败', error.message)
         } else {
@@ -166,12 +288,18 @@ export default {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
-}
 
-.table-header h2 {
-  color: $text-color;
-  font-size: 1.5rem;
-  margin: 0;
+  h2 {
+    color: $text-color;
+    font-size: 1.5rem;
+    margin: 0;
+  }
+
+  // 按钮容器样式
+  .header-buttons {
+    display: flex;
+    gap: 10px;
+  }
 }
 
 .export-btn {
@@ -195,6 +323,36 @@ export default {
   background-color: #ccc;
   cursor: not-allowed;
   transform: none;
+}
+
+// 进度提示样式
+.progress-indicator {
+  margin: 16px 0;
+  padding: 12px;
+  background-color: #f9f9f9;
+  border-radius: $border-radius;
+  box-shadow: $shadow-sm;
+
+  .progress-text {
+    margin-bottom: 8px;
+    color: $text-color;
+    font-size: 14px;
+  }
+
+  .progress-bar-container {
+    width: 100%;
+    height: 8px;
+    background-color: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+
+    .progress-bar {
+      height: 100%;
+      background-color: $primary-color;
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+  }
 }
 
 .table-container {
@@ -267,6 +425,11 @@ export default {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
+  }
+
+  .header-buttons {
+    width: 100%;
+    flex-direction: column;
   }
 
   .table th,

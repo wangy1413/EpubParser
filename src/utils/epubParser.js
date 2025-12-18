@@ -9,7 +9,7 @@ import * as EPUBJS from 'epubjs'
 export async function parseEpub(fileData, filePath = '') {
   try {
     // 尝试使用 epubjs 解析
-    let bookData, statistics
+    let bookData, statistics, coverImage
 
     try {
       // 确保数据格式正确 - 将Buffer转换为ArrayBuffer
@@ -21,22 +21,20 @@ export async function parseEpub(fileData, filePath = '') {
         }
       }
 
-      console.log('使用的数据类型:', bookDataToUse.constructor.name)
-
       // 使用 epubjs 解析
       const book = new EPUBJS.Book()
 
       // 加载书籍数据
       await book.open(bookDataToUse)
-      console.log('书籍元数据:', book)
       await book.opened
       // 解析目录结构
       const navigation = book.navigation
-      console.log('导航数据:', book?.navigation)
+
+      // 提取封面图
+      coverImage = await extractCoverImage(book)
 
       // 如果导航数据为undefined，使用模拟数据
       if (!navigation) {
-        console.warn('导航数据为undefined，使用模拟数据')
         bookData = generateMockContents()
         statistics = generateMockStatistics(filePath)
       } else {
@@ -49,18 +47,16 @@ export async function parseEpub(fileData, filePath = '') {
         bookData = contents
       }
 
-
     } catch (epubjsError) {
-      console.warn('epubjs 解析失败，详细错误:', epubjsError)
       // 如果 epubjs 解析失败，提供模拟数据
       bookData = generateMockContents()
-
       statistics = generateMockStatistics(filePath)
     }
 
     return {
       content: bookData,
-      statistics: statistics
+      statistics: statistics,
+      coverImage: coverImage
     }
   } catch (error) {
     console.error('EPUB 解析错误:', error)
@@ -101,6 +97,128 @@ function extractContents(navigation) {
 }
 
 /**
+ * 提取封面图
+ * @param {Object} book - epubjs Book 对象
+ * @returns {Promise<string|null>} 封面图的 Base64 编码或 null
+ */
+async function extractCoverImage(book) {
+  try {
+    // 方法1: 从书籍的封面属性获取
+    if (book.cover) {
+      try {
+        const response = await book.request(book.cover)
+        if (response && response.blob) {
+          const blob = await response.blob()
+          return await blobToBase64(blob)
+        }
+      } catch (error) {
+        // 忽略错误，继续尝试其他方法
+      }
+    }
+
+    // 方法2: 从 OPF 元数据中查找
+    if (book.package && book.package.metadata) {
+      const metadata = book.package.metadata
+      // 查找 cover-image 元数据
+      if (metadata['cover-image']) {
+        const coverId = metadata['cover-image']
+        if (book.package.manifest) {
+          const coverItem = book.package.manifest.find(item => item.id === coverId)
+          if (coverItem && coverItem.href) {
+            try {
+              const response = await book.request(coverItem.href)
+              if (response && response.blob) {
+                const blob = await response.blob()
+                return await blobToBase64(blob)
+              }
+            } catch (error) {
+              // 忽略错误，继续尝试其他方法
+            }
+          }
+        }
+      }
+    }
+
+    // 方法3: 尝试从目录的第一个项目获取（通常封面是第一个项目）
+    if (book.navigation && book.navigation.toc && book.navigation.toc.length > 0) {
+      const firstItem = book.navigation.toc[0]
+      if (firstItem && firstItem.href) {
+        try {
+          // 这里简化处理，实际可能需要解析HTML内容查找图片
+          const response = await book.request(firstItem.href)
+          if (response && response.text) {
+            const html = await response.text()
+            // 简单的HTML解析，查找第一个图片标签
+            const imgMatch = html.match(/<img[^>]+src="([^"]+)"[^>]*>/i)
+            if (imgMatch && imgMatch[1]) {
+              // 处理相对路径
+              const imgSrc = imgMatch[1].startsWith('http') ? imgMatch[1] : new URL(imgMatch[1], new URL(firstItem.href, book.url)).href
+              try {
+                const imgResponse = await fetch(imgSrc)
+                if (imgResponse.ok) {
+                  const blob = await imgResponse.blob()
+                  return await blobToBase64(blob)
+                }
+              } catch (error) {
+                // 忽略错误，继续尝试其他方法
+              }
+            }
+          }
+        } catch (error) {
+          // 忽略错误，继续尝试其他方法
+        }
+      }
+    }
+
+    // 方法4: 使用 book.coverUrl() 获取封面图 URL，然后转换为 Base64
+    try {
+      const coverUrl = await book.coverUrl()
+      if (coverUrl) {
+        // 如果是 blob URL，直接获取 blob 对象
+        if (coverUrl.startsWith('blob:')) {
+          // 使用 fetch 获取 blob 对象
+          const response = await fetch(coverUrl)
+          if (response.ok) {
+            const blob = await response.blob()
+            return await blobToBase64(blob)
+          }
+        } else {
+          // 如果是普通 URL，使用 book.request 获取
+          const response = await book.request(coverUrl)
+          if (response && response.blob) {
+            const blob = await response.blob()
+            return await blobToBase64(blob)
+          }
+        }
+      }
+    } catch (error) {
+      // 忽略错误，继续尝试其他方法
+    }
+
+    return null
+  } catch (error) {
+    console.error('提取封面图时出错:', error)
+    return null
+  }
+}
+
+/**
+ * 将 Blob 转换为 Base64 编码
+ * @param {Blob} blob - Blob 对象
+ * @returns {Promise<string>} Base64 编码的字符串
+ */
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      resolve(reader.result)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
+/**
  * 格式化书号
  * @param {string} bookId - 原始书号
  * @returns {string} 格式化后的书号
@@ -123,7 +241,6 @@ function formatBookId(bookId) {
 async function calculateStatistics(book, contents, filePath) {
   // 尝试获取书籍元数据
   const metadata = book.package.metadata || {}
-  console.log('原始元数据:', JSON.stringify(metadata, null, 2));
 
   // 从文件路径获取文件名
   const fileName = filePath ? filePath.split('/').pop() || filePath.split('\\').pop() : '未知文件'
@@ -199,6 +316,7 @@ function generateMockStatistics(filePath) {
     author: mockAuthors[Math.floor(Math.random() * mockAuthors.length)],
     publisher: mockPublishers[Math.floor(Math.random() * mockPublishers.length)],
     publishDate: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    description: '这是一本关于技术和创新的书籍，探讨了现代科技发展对社会的影响。'
+    description: '这是一本关于技术和创新的书籍，探讨了现代科技发展对社会的影响。',
+    coverImage: null
   }
 }

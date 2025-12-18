@@ -37,7 +37,6 @@ export default {
       try {
         // 检查是否在 Node.js/uTools 环境中
         if (typeof window !== 'undefined' && window.utools) {
-          console.log('uTools 环境')
           // uTools 环境
           const filePaths = window.utools.showOpenDialog({
             title: '选择 EPUB 文件',
@@ -46,7 +45,6 @@ export default {
               { name: 'EPUB 文件', extensions: ['epub'] }
             ]
           })
-          console.log('选择的文件路径:', filePaths)
           if (filePaths && filePaths.length > 0) {
             this.selectedFilePath = filePaths[0]
             this.selectedDirectoryPath = ''
@@ -54,24 +52,15 @@ export default {
             this.$emit('file-selected', filePaths[0])
           }
         } else {
-          // 非 uTools 环境，模拟文件选择
-          console.log('非 uTools 环境，模拟文件选择')
-          // 开发环境模拟
-          const mockFilePath = '/path/to/sample.epub'
-          this.selectedFilePath = mockFilePath
-          this.selectedDirectoryPath = ''
-          this.epubFilesFound = 0
-          this.$emit('file-selected', mockFilePath)
+          throw new Error('无法选择文件，需要在 uTools 环境中运行')
         }
       } catch (error) {
-        console.error('选择文件失败:', error)
         alert('选择文件失败: ' + error.message)
       }
     },
 
     handleSelectDirectory() {
       try {
-
         // 检查是否在 Node.js/uTools 环境中
         if (typeof window !== 'undefined' && window.utools) {
           // uTools 环境
@@ -79,7 +68,6 @@ export default {
             title: '选择目录',
             properties: ['openDirectory']
           })
-          console.log('选择的目录路径:', directoryPaths)
           if (directoryPaths && directoryPaths.length > 0) {
             this.selectedDirectoryPath = directoryPaths[0]
             this.selectedFilePath = ''
@@ -87,14 +75,9 @@ export default {
             this.$emit('directory-scanned', directoryPaths[0])
           }
         } else {
-          // 开发环境模拟
-          const mockDirectoryPath = '/path/to/epub/books'
-          this.selectedDirectoryPath = mockDirectoryPath
-          this.selectedFilePath = ''
-          this.$emit('directory-scanned', mockDirectoryPath)
+          throw new Error('无法选择目录，需要在 uTools 环境中运行')
         }
       } catch (error) {
-        console.error('选择目录失败:', error)
         alert('选择目录失败: ' + error.message)
       }
     },

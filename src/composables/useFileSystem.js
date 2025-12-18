@@ -83,7 +83,7 @@ export function useFileSystem() {
               try {
                 stats = await window.electronAPI.getFileStats(fullPath)
               } catch (err) {
-                console.warn(`无法获取文件 ${fullPath} 的信息:`, err)
+                // 忽略获取文件信息失败的情况
               }
               
               epubFiles.push({
@@ -101,24 +101,7 @@ export function useFileSystem() {
         await scanRecursively(directoryPath)
         return epubFiles
       } else {
-        // 模拟环境，返回示例数据
-        console.log('模拟环境: 返回示例 EPUB 文件列表')
-        return [
-          {
-            path: '/path/to/book1.epub',
-            name: 'book1.epub',
-            size: 1024 * 1024 * 2,
-            mtime: new Date().toISOString(),
-            birthtime: new Date().toISOString()
-          },
-          {
-            path: '/path/to/book2.epub',
-            name: 'book2.epub',
-            size: 1024 * 800,
-            mtime: new Date().toISOString(),
-            birthtime: new Date().toISOString()
-          }
-        ]
+        throw new Error('无法访问文件系统，需要在 uTools 环境中运行')
       }
     } catch (err) {
       error.value = err.message

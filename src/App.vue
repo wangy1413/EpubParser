@@ -2,7 +2,7 @@
   <div class="app">
     <header class="app-header text-center mb-md">
       <h1>EPUB 解析器</h1>
-      <p>用于解析 EPUB 文件并提取目录结构和统计信息</p>
+      <p>用于解析 EPUB 文件并提取统计信息与封面</p>
     </header>
 
     <main class="app-main">
@@ -22,7 +22,7 @@
       <BooksTable v-if="showBooksTable" :books="epubFiles" @book-selected="handleBookSelected" />
 
       <!-- 统计信息 -->
-      <Statistics v-if="statistics" :stats="statistics" />
+      <Statistics v-if="statistics" :stats="statistics" :cover-image="coverImage" />
 
       <!-- 结果表格 -->
       <ResultsTable v-if="results.length > 0" :data="results" />
@@ -53,6 +53,7 @@ export default {
     const fileSelectorRef = ref(null)
     const results = ref([])
     const statistics = ref(null)
+    const coverImage = ref(null)
     const progress = ref(0)
     const error = ref('')
     const epubFiles = ref([])
@@ -72,6 +73,7 @@ export default {
         // 重置状态
         results.value = []
         statistics.value = null
+        coverImage.value = null
         error.value = ''
         progress.value = 0
         epubFiles.value = [] // 清空文件列表
@@ -100,6 +102,7 @@ export default {
         // 重置状态
         results.value = []
         statistics.value = null
+        coverImage.value = null
         error.value = ''
         progress.value = 30 // 表示扫描开始
         isScanning.value = true
@@ -142,6 +145,7 @@ export default {
         // 重置状态
         results.value = []
         statistics.value = null
+        coverImage.value = null
         error.value = ''
         progress.value = 10
 
@@ -169,6 +173,7 @@ export default {
         // 设置结果
         results.value = parseResult.content || []
         statistics.value = parseResult.statistics
+        coverImage.value = parseResult.coverImage
 
         // 完成进度
         progress.value = 100
@@ -191,6 +196,7 @@ export default {
       fileSelectorRef,
       results,
       statistics,
+      coverImage,
       progress,
       error,
       epubFiles,
