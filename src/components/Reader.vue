@@ -21,8 +21,8 @@
         </div>
         <div class="toc-content">
           <ul class="toc-list">
-            <li v-for="item in tocItems" :key="item.url || item.label" class="toc-item"
-              :class="{ 'active': currentChapter === item.url }" @click="navigateTo(item.url)">
+            <li v-for="(item, index) in tocItems" :key="item.id" class="toc-item"
+              :class="{ 'active': currentChapterIndex == index }" @click="navigateTo(index)">
               <span class="toc-label">{{ item.label }}</span>
             </li>
           </ul>
@@ -115,22 +115,30 @@ export default {
         this.canGoNext = false
         this.canGoPrevious = false
 
-
+        console.log(this.book)
         // 获取目录
         const navigation = this.book.navigation
+        let tocItemsList = []
         if (navigation && navigation.toc) {
-          this.tocItems = this.flattenToc(navigation.toc)
-          this.totalChapters = this.tocItems.length
+          tocItemsList = this.flattenToc(navigation.toc)
         }
 
         // 如果没有从目录获取到内容，尝试从 spine 获取
-        if (this.tocItems.length === 0 && this.book.spine && Array.isArray(this.book.spine)) {
-          this.tocItems = this.book.spine.map((item, index) => ({
-            label: `章节 ${index + 1}`,
+        if (this.book.spine.items && Array.isArray(this.book.spine.items)) {
+          this.tocItems = this.book.spine.items.map((item, index) => ({
+            label: tocItemsList[index]?.label || `章节 ${index + 1}`,
             url: item.href,
-            level: 0
+            level: 0,
+            id: item.idref
           }))
           this.totalChapters = this.tocItems.length
+        } else {
+          // 获取目录
+          const navigation = this.book.navigation
+          if (navigation && navigation.toc) {
+            this.tocItems = tocItemsList
+            this.totalChapters = this.tocItems.length
+          }
         }
 
         // 获取书籍标题
@@ -154,15 +162,6 @@ export default {
           this.updateNavigationState()
         }
 
-
-
-        // 添加鼠标滚轮事件监听，实现横向滚动
-        const readerEl = this.$refs.readerEl
-        if (readerEl) {
-          // 直接监听reader-area的滚轮事件，使用capture模式确保能捕获到所有子元素的滚轮事件
-          readerEl.addEventListener('wheel', this.handleWheel, { passive: false, capture: true })
-        }
-
         // 监听章节变化
         this.rendition.on('relocated', (location) => {
           this.updateCurrentChapter(location.start.cfi)
@@ -178,8 +177,8 @@ export default {
         })
 
         // 计算页数
-        // 调整参数为2048，解决页码计算为实际2倍的问题
-        this.book.locations.generate(2048).then(() => {
+        // 使用默认参数，让epubjs自动计算最合适的位置数量，提高页码准确性
+        this.book.locations.generate().then(() => {
           this.locations = this.book.locations
           this.totalPages = this.locations.length()
 
@@ -196,11 +195,6 @@ export default {
           // 防止页面一直显示"计算中..."
           this.totalPages = 1
         })
-
-
-
-        // 处理资源请求，拦截不支持的 URL 方案
-
 
         // 监听资源请求，处理不支持的 URL 方案
         this.rendition.on('request', (request) => {
@@ -225,6 +219,7 @@ export default {
 
       toc.forEach((item) => {
         const tocItem = {
+          id: item.id,
           label: item.label,
           url: item.href,
           level: level
@@ -241,8 +236,56 @@ export default {
 
     // 更新当前章节
     updateCurrentChapter(cfi) {
-      // 简化实现：只在用户点击目录或导航按钮时更新章节
-      // 移除复杂的CFI匹配逻辑，避免性能问题和潜在错误
+      if (!this.locations || !this.tocItems.length) {
+        return
+      }
+
+      try {
+        // 根据CFI获取当前位置索引
+        const currentLocation = this.locations.locationFromCfi(cfi)
+
+        // 查找当前位置对应的章节
+        let currentChapterIndex = 0
+        for (let i = 0; i < this.tocItems.length; i++) {
+          const chapter = this.tocItems[i]
+          const nextChapter = this.tocItems[i + 1]
+
+          // 获取当前章节的起始位置
+          let chapterStartLocation
+          try {
+            chapterStartLocation = this.locations.locationFromCfi(chapter.url)
+          } catch (error) {
+            continue
+          }
+
+          // 获取下一章的起始位置，如果是最后一章则使用总页数
+          let nextChapterStartLocation = this.totalPages
+          if (nextChapter) {
+            try {
+              nextChapterStartLocation = this.locations.locationFromCfi(nextChapter.url)
+            } catch (error) {
+              // 如果下一章URL无效，使用总页数
+              nextChapterStartLocation = this.totalPages
+            }
+          }
+
+          // 检查当前位置是否在当前章节范围内
+          if (currentLocation >= chapterStartLocation && currentLocation < nextChapterStartLocation) {
+            currentChapterIndex = i
+            break
+          }
+        }
+
+        // 更新当前章节信息
+        const newChapter = this.tocItems[currentChapterIndex]
+        if (newChapter && this.currentChapter !== newChapter.url) {
+          this.currentChapter = newChapter.url
+          this.currentChapterIndex = currentChapterIndex
+          this.updateNavigationState()
+        }
+      } catch (error) {
+        console.error('Error updating current chapter:', error)
+      }
     },
 
     // 更新导航状态
@@ -254,11 +297,17 @@ export default {
     },
 
     // 导航到指定章节
-    async navigateTo(url) {
+    async navigateTo(index) {
+      console.log(index)
+      if (index < 0 || index >= this.tocItems.length) {
+        console.error('无效的章节索引:', index)
+        return
+      }
+      index += 1
       try {
-        await this.rendition.display(url)
-        this.currentChapter = url
-        this.currentChapterIndex = this.tocItems.findIndex(item => item.url === url)
+        await this.rendition.display(this.tocItems[index].url)
+        this.currentChapter = this.tocItems[index].url
+        this.currentChapterIndex = index
         this.updateNavigationState()
         this.showToc = false
       } catch (error) {
@@ -286,6 +335,7 @@ export default {
 
     // 下一页
     async nextChapter() {
+      console.log(this.currentChapterIndex)
       if (!this.rendition) {
         return
       }
@@ -406,7 +456,10 @@ export default {
       const currentLocation = this.rendition.currentLocation()
       if (currentLocation && currentLocation.start) {
         const location = this.locations.locationFromCfi(currentLocation.start.cfi)
+        console.log(currentLocation)
         this.currentPage = Math.max(1, Math.min(this.totalPages, location))
+        // 计算当前章索引
+        this.currentChapterIndex = currentLocation.start.index - 1 >= 0 ? currentLocation.start.index - 1 : 0
         // 更新导航状态
         this.updateNavigationState()
       }
@@ -426,7 +479,6 @@ export default {
         }
 
         const currentLocationIndex = this.locations.locationFromCfi(currentLocation.start.cfi)
-        const currentChapter = this.tocItems[this.currentChapterIndex]
         const nextChapter = this.tocItems[this.currentChapterIndex + 1]
 
         // 如果有下一章，检查是否到达当前章的最后一页
