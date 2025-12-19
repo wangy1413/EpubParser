@@ -7,7 +7,7 @@
     <div v-else class="app-content">
       <header class="app-header text-center mb-md">
         <h1>EPUB 阅读解析器</h1>
-        <p>用于解析 EPUB 文件阅读并提取统计信息与封面</p>
+        <p>用于 EPUB 文件阅读解析并提取统计信息与封面</p>
       </header>
 
       <main class="app-main">
@@ -24,9 +24,9 @@
         </div>
         <div style="display: flex; justify-content: space-between;">
           <!-- EPUB文件列表 -->
-          <BooksTable style="min-width: 500px;width: 100%;" v-if="showBooksTable" :books="epubFiles"
+          <BooksTable style="min-width: 450px;width: 100%;" v-if="showBooksTable" :books="epubFiles"
             @book-selected="handleBookSelected" />
-          <div style="flex: 1; margin-left: 20px;min-width: 350px;">
+          <div v-if="statistics" style=" margin-left: 20px;min-width: 400px;">
             <!-- 统计信息 -->
             <Statistics v-if="statistics" :stats="statistics" :cover-image="coverImage" @read-book="handleReadBook" />
 

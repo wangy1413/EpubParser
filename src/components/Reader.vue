@@ -30,7 +30,7 @@
       </aside>
 
       <!-- 中央阅读区域 -->
-      <main class="content-area">
+      <main class="content-area" @click.prevent.stop="handleClickContent">
         <div ref="readerEl" class="reader-area"></div>
 
         <!-- 章节导航 -->
@@ -314,6 +314,7 @@ export default {
       }
       try {
         if (this.tocType === 'spine') {
+          await this.rendition.display(this.tocItems[index].url)
           this.currentChapter = this.tocItems[index].url
           this.currentChapterIndex = index
         } else {
@@ -363,6 +364,13 @@ export default {
       } catch (error) {
         console.error('下一页导航失败:', error)
       }
+    },
+
+    // 点击内容区域
+    handleClickContent() {
+      console.log('点击内容区域')
+      this.showToc = false
+      this.showSettings = false
     },
 
     // 切换目录显示
