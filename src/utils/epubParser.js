@@ -4,9 +4,11 @@ import * as EPUBJS from 'epubjs'
  * 解析 EPUB 文件
  * @param {Buffer|ArrayBuffer} fileData - EPUB 文件数据
  * @param {string} filePath - 文件路径（可选）
+ * @param {boolean} extractCover - 是否提取封面图，默认 true
  * @returns {Promise<Object>} 解析结果
  */
-export async function parseEpub(fileData, filePath = '') {
+export async function parseEpub(fileData, filePath = '', extractCover = true) {
+  console.log(extractCover)
   try {
     // 尝试使用 epubjs 解析
     let bookData, statistics, coverImage
@@ -30,8 +32,12 @@ export async function parseEpub(fileData, filePath = '') {
       // 解析目录结构
       const navigation = book.navigation
 
-      // 提取封面图
-      coverImage = await extractCoverImage(book)
+      // 提取封面图（仅当 extractCover 为 true 时）
+      if (extractCover) {
+        coverImage = await extractCoverImage(book)
+      } else {
+        coverImage = null
+      }
 
       // 如果导航数据为undefined，使用模拟数据
       if (!navigation) {

@@ -22,7 +22,7 @@
         <div class="toc-content">
           <ul class="toc-list">
             <li v-for="(item, index) in tocItems" :key="item.id" class="toc-item"
-              :class="{ 'active': currentChapterIndex == index }" @click="navigateTo(index)">
+              :class="{ 'active': currentChapterIndex == index }" @click="navigateTo(item, index)">
               <span class="toc-label">{{ item.label }}</span>
             </li>
           </ul>
@@ -83,8 +83,8 @@ export default {
       showToc: false,
       showSettings: false,
       fontSize: 18,
-
       tocItems: [],
+      tocType: '',
       currentChapter: '',
       currentChapterIndex: 0,
       totalChapters: 0,
@@ -122,18 +122,27 @@ export default {
         if (navigation && navigation.toc) {
           tocItemsList = this.flattenToc(navigation.toc)
         }
-
+        console.log(tocItemsList)
         // 如果没有从目录获取到内容，尝试从 spine 获取
-        if (this.book.spine.items && Array.isArray(this.book.spine.items)) {
-          this.tocItems = this.book.spine.items.map((item, index) => ({
+        if (this.book.spine.items && Array.isArray(this.book.spine.items) && this.book.spine.items.length - tocItemsList.length <= 1 && this.book.spine.items.length - tocItemsList.length >= 0) {
+          console.log("从spine获取章节内容")
+          this.tocType = 'spine'
+          let spineItems = this.book.spine.items
+          if (spineItems.length > tocItemsList.length) {
+            spineItems = spineItems.slice(1)
+          }
+          this.tocItems = spineItems.map((item, index) => ({
             label: tocItemsList[index]?.label || `章节 ${index + 1}`,
             url: item.href,
             level: 0,
             id: item.idref
           }))
+
           this.totalChapters = this.tocItems.length
         } else {
           // 获取目录
+          console.log("从目录获取章节内容")
+          this.tocType = 'toc'
           const navigation = this.book.navigation
           if (navigation && navigation.toc) {
             this.tocItems = tocItemsList
@@ -297,17 +306,21 @@ export default {
     },
 
     // 导航到指定章节
-    async navigateTo(index) {
+    async navigateTo(item, index) {
       console.log(index)
       if (index < 0 || index >= this.tocItems.length) {
         console.error('无效的章节索引:', index)
         return
       }
-      index += 1
       try {
-        await this.rendition.display(this.tocItems[index].url)
-        this.currentChapter = this.tocItems[index].url
-        this.currentChapterIndex = index
+        if (this.tocType === 'spine') {
+          this.currentChapter = this.tocItems[index].url
+          this.currentChapterIndex = index
+        } else {
+          await this.rendition.display(item.url)
+          this.currentChapter = item.url
+          this.currentChapterIndex = this.tocItems.findIndex(tocItem => tocItem.url === item.url)
+        }
         this.updateNavigationState()
         this.showToc = false
       } catch (error) {
@@ -380,6 +393,34 @@ export default {
       this.$emit('close')
     },
 
+    // 销毁阅读器，清理资源
+    destroyReader() {
+      // 清理rendition相关资源
+      if (this.rendition) {
+        // 销毁rendition，EPUB.js会自动处理事件监听器的移除
+        // this.rendition.destroy()
+        this.rendition = null
+      }
+
+      // 清理locations资源
+      if (this.locations) {
+        // 清除locations引用
+        this.locations = null
+      }
+
+      // 清理章节数据
+      this.tocItems = []
+      this.pagesPerChapter = []
+
+      // 清理其他状态
+      this.currentChapter = ''
+      this.currentChapterIndex = 0
+      this.currentPage = 1
+      this.totalPages = 0
+      this.canGoNext = false
+      this.canGoPrevious = false
+    },
+
     // 计算每章的页数
     calculatePagesPerChapter() {
       if (!this.locations || this.tocItems.length === 0) {
@@ -392,8 +433,6 @@ export default {
         const nextChapter = this.tocItems[i + 1]
 
         try {
-
-
           // 检查URL是否为有效的EpubCFI格式
           let startLocation, endLocation
 
@@ -459,7 +498,12 @@ export default {
         console.log(currentLocation)
         this.currentPage = Math.max(1, Math.min(this.totalPages, location))
         // 计算当前章索引
-        this.currentChapterIndex = currentLocation.start.index - 1 >= 0 ? currentLocation.start.index - 1 : 0
+        if (this.tocType === 'spine') {
+          this.currentChapterIndex = currentLocation.start.index - 1 >= 0 ? currentLocation.start.index - 1 : 0
+        } else {
+          // 非spine类型，根据URL查找章节索引
+          this.currentChapterIndex = this.tocItems.findIndex(tocItem => tocItem.url.includes(currentLocation.start.href))
+        }
         // 更新导航状态
         this.updateNavigationState()
       }
@@ -504,12 +548,7 @@ export default {
     },
 
     // 销毁阅读器
-    destroyReader() {
-      if (this.rendition) {
-        this.rendition.destroy()
-        this.rendition = null
-      }
-    }
+
   }
 }
 </script>

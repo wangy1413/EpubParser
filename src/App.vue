@@ -22,22 +22,26 @@
         <div v-if="error" class="error-message">
           {{ error }}
         </div>
+        <div style="display: flex; justify-content: space-between;">
+          <!-- EPUB文件列表 -->
+          <BooksTable style="min-width: 500px;width: 100%;" v-if="showBooksTable" :books="epubFiles"
+            @book-selected="handleBookSelected" />
+          <div style="flex: 1; margin-left: 20px;min-width: 350px;">
+            <!-- 统计信息 -->
+            <Statistics v-if="statistics" :stats="statistics" :cover-image="coverImage" @read-book="handleReadBook" />
 
-        <!-- EPUB文件列表 -->
-        <BooksTable v-if="showBooksTable" :books="epubFiles" @book-selected="handleBookSelected" />
+            <!-- 结果表格 -->
+            <ResultsTable v-if="results.length > 0" :data="results" />
+          </div>
 
-        <!-- 统计信息 -->
-        <Statistics v-if="statistics" :stats="statistics" :cover-image="coverImage" @read-book="handleReadBook" />
-
-        <!-- 结果表格 -->
-        <ResultsTable v-if="results.length > 0" :data="results" />
+        </div>
       </main>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 import FileSelector from './components/FileSelector.vue'
 import ProgressBar from './components/ProgressBar.vue'
 import ResultsTable from './components/ResultsTable.vue'
@@ -71,7 +75,7 @@ export default {
     const currentBook = ref(null)
     const bookInstance = ref(null)
 
-    const { parseEpubFile, loadBook, closeBook } = useEpubParser()
+    const { parseEpubFile, loadBook, closeBook, cleanup } = useEpubParser()
     const { isEpubFile, scanDirectoryForEpubs } = useFileSystem()
     // 计算属性：是否显示书籍表格
     const showBooksTable = computed(() => {
@@ -122,7 +126,7 @@ export default {
 
         console.log(`开始扫描目录: ${directoryPath}`)
 
-        // 扫描目录B 文件
+        // 扫描目录B 文件，最多加载500本书
         const files = await scanDirectoryForEpubs(directoryPath)
 
         // 更新文件列表
@@ -132,6 +136,11 @@ export default {
         progress.value = 100
         if (fileSelectorRef.value) {
           fileSelectorRef.value.setEpubFilesCount(files.length)
+        }
+
+        // 如果达到最大文件数，给用户提示
+        if (files.length >= 500) {
+          alert(`已扫描到 ${files.length} 个 EPUB 文件，已达到最大限制，只显示前500个文件。`)
         }
 
         console.log(`扫描完成，找到 ${files.length} 个 EPUB 文件`)
@@ -243,6 +252,11 @@ export default {
       currentBook.value = null
       showReader.value = false
     }
+
+    // 组件卸载时清理资源
+    onBeforeUnmount(() => {
+      cleanup()
+    })
 
     return {
       fileSelectorRef,
