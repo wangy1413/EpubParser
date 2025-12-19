@@ -82,6 +82,24 @@ export default {
       return epubFiles.value.length > 0
     })
 
+    utools.onPluginEnter(({ code, type, payload, option, from }) => {
+      console.log("用户进入插件应用", code, type, payload);
+      console.log("用户inrush插件的方式：", from);
+      if (type === 'files' && payload.length > 0) {
+        if (isEpubFile(payload[0].path)) {
+          handleFileSelected(payload[0].path)
+        }
+      }
+    })
+
+    utools.onPluginOut((isKill) => {
+      if (isKill) {
+        console.log("用户结束运行插件应用");
+      } else {
+        console.log("插件应用被隐藏后台");
+      }
+    });
+
     // 处理单个文件选择
     const handleFileSelected = async (filePath) => {
       console.log(`选择的文件路径: ${filePath}`)
