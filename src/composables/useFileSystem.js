@@ -2,12 +2,12 @@ import { ref } from 'vue'
 
 export function useFileSystem() {
   const error = ref(null)
-  
+
   // 读取文件
   const readFile = async (filePath) => {
     try {
       error.value = null
-      
+
       if (typeof window !== 'undefined' && window.electronAPI) {
         // uTools 环境
         const data = await window.electronAPI.readFile(filePath)
@@ -20,12 +20,12 @@ export function useFileSystem() {
       throw err
     }
   }
-  
+
   // 同步读取文件
   const readFileSync = (filePath) => {
     try {
       error.value = null
-      
+
       if (typeof window !== 'undefined' && window.electronAPI) {
         return window.electronAPI.readFileSync(filePath)
       } else {
@@ -36,12 +36,12 @@ export function useFileSystem() {
       throw err
     }
   }
-  
+
   // 获取文件信息
   const getFileStats = async (filePath) => {
     try {
       error.value = null
-      
+
       if (typeof window !== 'undefined' && window.electronAPI) {
         const stats = await window.electronAPI.getFileStats(filePath)
         return stats
@@ -53,27 +53,27 @@ export function useFileSystem() {
       throw err
     }
   }
-  
+
   // 检查文件是否为 EPUB
   const isEpubFile = (filePath) => {
     return filePath && filePath.toLowerCase().endsWith('.epub')
   }
-  
+
   // 扫描目录及其子目录中的所有 EPUB 文件
   const scanDirectoryForEpubs = async (directoryPath) => {
     try {
       error.value = null
       const epubFiles = []
-      
+
       if (typeof window !== 'undefined' && window.electronAPI) {
         // 使用递归函数扫描目录
         const scanRecursively = async (path) => {
           // 获取目录内容
           const entries = await window.electronAPI.readdir(path, { withFileTypes: true })
-          
+
           for (const entry of entries) {
             const fullPath = `${path}/${entry.name}`
-            
+
             if (entry.isDirectory()) {
               // 递归扫描子目录
               await scanRecursively(fullPath)
@@ -85,7 +85,7 @@ export function useFileSystem() {
               } catch (err) {
                 // 忽略获取文件信息失败的情况
               }
-              
+
               epubFiles.push({
                 path: fullPath,
                 name: entry.name,
@@ -96,7 +96,7 @@ export function useFileSystem() {
             }
           }
         }
-        
+
         // 开始扫描
         await scanRecursively(directoryPath)
         return epubFiles
@@ -108,7 +108,7 @@ export function useFileSystem() {
       throw new Error(`扫描目录失败: ${err.message}`)
     }
   }
-  
+
   return {
     readFile,
     readFileSync,

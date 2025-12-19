@@ -1,32 +1,38 @@
 <template>
   <div class="app">
-    <header class="app-header text-center mb-md">
-      <h1>EPUB 解析器</h1>
-      <p>用于解析 EPUB 文件并提取统计信息与封面</p>
-    </header>
+    <!-- 阅读器 -->
+    <Reader v-if="showReader" :book="currentBook" @close="handleReaderClose" />
 
-    <main class="app-main">
-      <!-- 文件选择器 -->
-      <FileSelector ref="fileSelectorRef" @file-selected="handleFileSelected"
-        @directory-scanned="handleDirectoryScanned" />
+    <!-- 主应用界面 -->
+    <div v-else class="app-content">
+      <header class="app-header text-center mb-md">
+        <h1>EPUB 解析器</h1>
+        <p>用于解析 EPUB 文件并提取统计信息与封面</p>
+      </header>
 
-      <!-- 进度条 -->
-      <ProgressBar v-if="progress > 0 && progress < 100" :progress="progress" />
+      <main class="app-main">
+        <!-- 文件选择器 -->
+        <FileSelector ref="fileSelectorRef" @file-selected="handleFileSelected"
+          @directory-scanned="handleDirectoryScanned" />
 
-      <!-- 错误提示 -->
-      <div v-if="error" class="error-message">
-        {{ error }}
-      </div>
+        <!-- 进度条 -->
+        <ProgressBar v-if="progress > 0 && progress < 100" :progress="progress" />
 
-      <!-- EPUB文件列表 -->
-      <BooksTable v-if="showBooksTable" :books="epubFiles" @book-selected="handleBookSelected" />
+        <!-- 错误提示 -->
+        <div v-if="error" class="error-message">
+          {{ error }}
+        </div>
 
-      <!-- 统计信息 -->
-      <Statistics v-if="statistics" :stats="statistics" :cover-image="coverImage" />
+        <!-- EPUB文件列表 -->
+        <BooksTable v-if="showBooksTable" :books="epubFiles" @book-selected="handleBookSelected" />
 
-      <!-- 结果表格 -->
-      <ResultsTable v-if="results.length > 0" :data="results" />
-    </main>
+        <!-- 统计信息 -->
+        <Statistics v-if="statistics" :stats="statistics" :cover-image="coverImage" @read-book="handleReadBook" />
+
+        <!-- 结果表格 -->
+        <ResultsTable v-if="results.length > 0" :data="results" />
+      </main>
+    </div>
   </div>
 </template>
 
@@ -37,6 +43,7 @@ import ProgressBar from './components/ProgressBar.vue'
 import ResultsTable from './components/ResultsTable.vue'
 import Statistics from './components/Statistics.vue'
 import BooksTable from './components/BooksTable.vue'
+import Reader from './components/Reader.vue'
 import { useEpubParser } from './composables/useEpubParser'
 import { useFileSystem } from './composables/useFileSystem'
 
@@ -47,7 +54,8 @@ export default {
     ProgressBar,
     ResultsTable,
     Statistics,
-    BooksTable
+    BooksTable,
+    Reader
   },
   setup() {
     const fileSelectorRef = ref(null)
@@ -58,8 +66,12 @@ export default {
     const error = ref('')
     const epubFiles = ref([])
     const isScanning = ref(false)
+    // 阅读器相关状态
+    const showReader = ref(false)
+    const currentBook = ref(null)
+    const bookInstance = ref(null)
 
-    const { parseEpubFile } = useEpubParser()
+    const { parseEpubFile, loadBook, closeBook } = useEpubParser()
     const { isEpubFile, scanDirectoryForEpubs } = useFileSystem()
     // 计算属性：是否显示书籍表格
     const showBooksTable = computed(() => {
@@ -172,7 +184,11 @@ export default {
 
         // 设置结果
         results.value = parseResult.content || []
+        // 保存当前文件路径到 statistics 对象，用于阅读功能
         statistics.value = parseResult.statistics
+        if (statistics.value) {
+          statistics.value.filePath = filePath
+        }
         coverImage.value = parseResult.coverImage
 
         // 完成进度
@@ -192,6 +208,42 @@ export default {
       }
     }
 
+    // 处理阅读书籍请求
+    const handleReadBook = async () => {
+      try {
+        // 检查是否有书籍统计信息和文件路径
+        if (!statistics.value || !statistics.value.filePath) {
+          throw new Error('请先选择并解析一本 EPUB 书籍')
+        }
+
+        // 加载书籍
+        progress.value = 20
+        const book = await loadBook(statistics.value.filePath)
+        progress.value = 80
+
+        // 设置当前书籍并显示阅读器
+        currentBook.value = book
+        showReader.value = true
+        progress.value = 100
+
+        // 重置进度条
+        setTimeout(() => {
+          progress.value = 0
+        }, 1000)
+      } catch (err) {
+        console.error('加载书籍时出错:', err)
+        error.value = err.message || '加载书籍时发生错误'
+        progress.value = 0
+      }
+    }
+
+    // 处理关闭阅读器
+    const handleReaderClose = () => {
+      closeBook()
+      currentBook.value = null
+      showReader.value = false
+    }
+
     return {
       fileSelectorRef,
       results,
@@ -203,7 +255,12 @@ export default {
       showBooksTable,
       handleFileSelected,
       handleDirectoryScanned,
-      handleBookSelected
+      handleBookSelected,
+      // 阅读器相关
+      showReader,
+      currentBook,
+      handleReadBook,
+      handleReaderClose
     }
   }
 }

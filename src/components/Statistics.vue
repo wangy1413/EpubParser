@@ -2,9 +2,14 @@
   <div class="statistics mt-md">
     <div class="statistics-header">
       <h2>文件统计</h2>
-      <button class="btn export-btn" @click="exportToExcel">
-        导出Excel表格
-      </button>
+      <div class="header-buttons">
+        <button class="btn read-btn" @click="handleReadBook" v-if="stats && Object.keys(stats).length > 0">
+          阅读书籍
+        </button>
+        <button class="btn export-btn" @click="exportToExcel" v-if="stats && Object.keys(stats).length > 0">
+          导出Excel表格
+        </button>
+      </div>
     </div>
 
     <div class="stats-grid">
@@ -67,6 +72,8 @@ export default {
       default: null
     }
   },
+  emits: ['read-book'],
+
   methods: {
     formatDate(date) {
       if (!date) return '未知'
@@ -165,6 +172,11 @@ export default {
           alert('导出失败: ' + error.message)
         }
       }
+    },
+
+    // 处理阅读书籍请求
+    handleReadBook() {
+      this.$emit('read-book')
     }
   }
 }
@@ -196,9 +208,16 @@ export default {
       color: $text-color;
       font-size: 18px;
     }
+
+    .header-buttons {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
   }
 
-  .export-btn {
+  .export-btn,
+  .read-btn {
     background-color: $primary-color;
     color: $white;
     padding: 8px 16px;
