@@ -6,8 +6,8 @@
     <!-- 主应用界面 -->
     <div v-else class="app-content">
       <header class="app-header text-center mb-md">
-        <h1>EPUB 解析器</h1>
-        <p>用于解析 EPUB 文件并提取统计信息与封面</p>
+        <h1>EPUB 阅读解析器</h1>
+        <p>用于解析 EPUB 文件阅读并提取统计信息与封面</p>
       </header>
 
       <main class="app-main">
