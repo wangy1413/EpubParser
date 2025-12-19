@@ -93,9 +93,9 @@ export default {
     })
 
     utools.onPluginOut((isKill) => {
+      cleanup()
       if (isKill) {
         console.log("用户结束运行插件应用");
-        cleanup()
       } else {
         console.log("插件应用被隐藏后台");
       }
